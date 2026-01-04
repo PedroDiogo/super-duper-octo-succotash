@@ -80,26 +80,35 @@
     ball.position.set(0, 0.02, 0);
     scene.add(ball);
 
-    // Club (simplified) - pivot point is at the grip (top of shaft)
+    // Club - pivot point at grip, shaft and head extend outward
     const clubGroup = new THREE.Group();
 
-    // Shaft - extends downward from grip point (origin)
-    const shaftGeo = new THREE.CylinderGeometry(0.01, 0.01, 1, 8);
-    const shaftMat = new THREE.MeshLambertMaterial({ color: 0x333333 });
+    // Shaft - extends along negative Y from origin (grip)
+    const shaftLength = 1.0;
+    const shaftGeo = new THREE.CylinderGeometry(0.012, 0.012, shaftLength, 8);
+    const shaftMat = new THREE.MeshLambertMaterial({ color: 0x444444 });
     const shaft = new THREE.Mesh(shaftGeo, shaftMat);
-    shaft.position.y = -0.5; // Shaft hangs down from pivot
+    shaft.position.y = -shaftLength / 2;
     clubGroup.add(shaft);
 
-    // Club head - at the bottom of the shaft
-    const headGeo = new THREE.BoxGeometry(0.08, 0.04, 0.15);
-    const headMat = new THREE.MeshLambertMaterial({ color: 0x888888 });
+    // Club head - attached at end of shaft, facing the swing direction
+    const headGeo = new THREE.BoxGeometry(0.12, 0.03, 0.08);
+    const headMat = new THREE.MeshLambertMaterial({ color: 0x666666 });
     const head = new THREE.Mesh(headGeo, headMat);
-    head.position.set(0.04, -1, 0); // At bottom of shaft
+    head.position.set(0.06, -shaftLength, 0);
     clubGroup.add(head);
 
-    // Position grip point above and behind the ball, angled for backswing
-    clubGroup.position.set(-0.2, 1.1, 0);
-    clubGroup.rotation.z = -Math.PI / 3; // Backswing position
+    // Grip indicator (small sphere at pivot)
+    const gripGeo = new THREE.SphereGeometry(0.025, 8, 8);
+    const gripMat = new THREE.MeshLambertMaterial({ color: 0x222222 });
+    const grip = new THREE.Mesh(gripGeo, gripMat);
+    clubGroup.add(grip);
+
+    // Position: grip above ball, club hangs down
+    // At rotation.z = 0, head is at (0.06, -1, 0) relative to group
+    // Ball is at (0, 0.02, 0), so position group at (0, 1.02, 0)
+    clubGroup.position.set(0, 1.02, 0);
+    clubGroup.rotation.z = -Math.PI / 2; // Backswing: club points backward
     scene.add(clubGroup);
 
     // Trajectory line
@@ -162,26 +171,31 @@
     function swing() {
       if (isFlying) return;
 
-      // Animate club swing - backswing to follow-through
-      const swingDuration = 400;
-      const startRotation = -Math.PI / 3;  // Backswing position
-      const impactRotation = Math.PI / 12; // Near vertical at impact
-      const endRotation = Math.PI / 2;     // Follow-through
+      // Animate club swing - full arc from backswing to follow-through
+      const swingDuration = 500;
+      const startRotation = -Math.PI / 2;   // Backswing: club horizontal behind
+      const impactRotation = 0;              // Impact: club vertical, head at ball
+      const endRotation = Math.PI * 0.7;     // Follow-through: club wraps around
       const startTime = Date.now();
 
       function animateSwing() {
         const elapsed = Date.now() - startTime;
         const progress = Math.min(elapsed / swingDuration, 1);
 
-        // Easing: fast through impact, slower at ends
-        const eased = progress < 0.5
-          ? 4 * progress * progress * progress
-          : 1 - Math.pow(-2 * progress + 2, 3) / 2;
+        // Custom easing: accelerate into impact, decelerate after
+        let eased;
+        if (progress < 0.5) {
+          // Accelerating downswing
+          eased = 2 * progress * progress;
+        } else {
+          // Decelerating follow-through
+          eased = 1 - Math.pow(-2 * progress + 2, 2) / 2;
+        }
 
         clubGroup.rotation.z = startRotation + (endRotation - startRotation) * eased;
 
-        // Trigger ball flight at impact point (~40% through swing)
-        if (progress >= 0.4 && !isFlying) {
+        // Trigger ball flight at impact (~50% through swing when club is vertical)
+        if (progress >= 0.5 && !isFlying) {
           startFlight();
         }
 
@@ -244,7 +258,7 @@
 
     function reset() {
       ball.position.set(0, 0.02, 0);
-      clubGroup.rotation.z = -Math.PI / 3; // Back to backswing position
+      clubGroup.rotation.z = -Math.PI / 2; // Back to backswing position
       camera.position.set(-5, 3, 8);
       camera.lookAt(0, 0, 0);
 
