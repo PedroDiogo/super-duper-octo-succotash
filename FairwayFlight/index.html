@@ -137,14 +137,19 @@
     let trajectoryLine = null;
 
     // Physics parameters
-    const GRAVITY = 9.81;
+    const GRAVITY = 9.81;  // m/s²
     const YARDS_PER_METER = 1.094;
+    const AIR_DENSITY = 1.225;  // kg/m³ at sea level
+    const BALL_MASS = 0.0459;  // kg (regulation golf ball)
+    const BALL_DIAMETER = 0.0427;  // m (regulation golf ball)
+    const BALL_AREA = Math.PI * (BALL_DIAMETER / 2) * (BALL_DIAMETER / 2);
 
     // Simulation state
     let isFlying = false;
     let flightTime = 0;
-    let initialVelocity = { x: 0, y: 0, z: 0 };
-    let currentDragEfficiency = 1.0;
+    let position = { x: 0, y: 0.02, z: 0 };
+    let velocity = { x: 0, y: 0, z: 0 };
+    let spinRate = { backspin: 0, sidespin: 0 };  // rpm
     let trajectoryPoints = [];
     let tracedPoints = []; // Points traced so far during flight
     let maxHeight = 0;
@@ -250,70 +255,79 @@
       return swingSpeed * getSmashFactor(loft, clubType);
     }
 
-    // Calculate drag efficiency based on loft and club type
-    // Approximates air resistance and spin effects
-    function getDragEfficiency(loft, clubType) {
+    // Calculate backspin rate based on club type and loft
+    // Higher loft = more spin
+    function getBackspin(loft, clubType, ballSpeed) {
+      // Spin loft relationship: more loft = more backspin
+      // Ball speed also affects spin
+      const spinLoftFactor = loft * 100;  // Base spin from loft
+      const speedFactor = ballSpeed * 30;  // More speed = more spin
+
       if (clubType === 'driver') {
-        return 1.0 - (loft * 0.0076);
+        return 2000 + spinLoftFactor + speedFactor * 0.3;  // 2000-3500 rpm
       } else if (clubType === 'wood') {
-        // 5 wood gets extra drag penalty
-        if (loft === 19) {
-          return 1.0 - (loft * 0.0105);
-        } else {
-          return 1.0 - (loft * 0.0092);
-        }
+        return 3000 + spinLoftFactor + speedFactor * 0.4;  // 3000-5000 rpm
       } else if (clubType === 'hybrid') {
-        return 1.0 - (loft * 0.0082);
+        return 4000 + spinLoftFactor + speedFactor * 0.5;  // 4000-6000 rpm
       } else if (clubType === 'iron') {
-        return 1.0 - (loft * 0.0088);  // More drag for irons
+        return 5000 + spinLoftFactor + speedFactor * 0.6;  // 5000-8000 rpm
       } else {  // wedges
-        return 1.0 - (loft * 0.0078);
+        return 7000 + spinLoftFactor + speedFactor * 0.7;  // 7000-11000 rpm
       }
+    }
+
+    // Calculate drag coefficient (Cd) based on ball speed
+    // Golf balls have lower Cd at higher speeds (drag crisis)
+    function getDragCoefficient(speed) {
+      // Reynolds number approximation
+      const Re = (speed * BALL_DIAMETER) / 0.000015;  // kinematic viscosity of air
+
+      // Cd varies from ~0.5 at low speed to ~0.2 at high speed
+      if (Re < 100000) {
+        return 0.5;
+      } else if (Re > 200000) {
+        return 0.23;
+      } else {
+        // Linear interpolation in transition region
+        const t = (Re - 100000) / 100000;
+        return 0.5 - (0.27 * t);
+      }
+    }
+
+    // Calculate lift coefficient (Cl) based on spin rate
+    // Magnus effect: spinning ball generates lift perpendicular to velocity
+    function getLiftCoefficient(spinRpm, speed) {
+      // Convert rpm to rad/s
+      const omega = spinRpm * 2 * Math.PI / 60;
+
+      // Spin parameter: S = rω/v
+      const spinParameter = (BALL_DIAMETER / 2) * omega / Math.max(speed, 0.1);
+
+      // Cl roughly proportional to spin parameter
+      // Typical golf ball Cl = 0.1 to 0.3
+      const Cl = Math.min(0.25 * spinParameter, 0.35);
+
+      return Cl;
     }
 
     // Get current club with calculated parameters
     function getCurrentClub() {
       const clubId = document.getElementById('club-selector').value;
       const club = clubs[clubId];
+      const ballSpeed = getBallSpeed(club.loft, club.type);
       return {
         name: club.name,
         loft: club.loft,
         type: club.type,
-        speed: getBallSpeed(club.loft, club.type),
+        speed: ballSpeed,
         angle: getLaunchAngle(club.loft, club.type),
-        dragEfficiency: getDragEfficiency(club.loft, club.type)
+        backspin: getBackspin(club.loft, club.type, ballSpeed)
       };
     }
 
+    // No longer used - trajectory is calculated dynamically with aerodynamic forces
     function calculateTrajectory() {
       trajectoryPoints = [];
-      const club = getCurrentClub();
-      const launchSpeed = club.speed;
-      const launchAngle = club.angle * Math.PI / 180;
-      const dragEfficiency = club.dragEfficiency;
-
-      const dt = 0.02;
-      let t = 0;
-      let maxT = (2 * launchSpeed * Math.sin(launchAngle)) / GRAVITY;
-
-      // Add some extra time for safety
-      maxT *= 1.1;
-
-      while (t <= maxT) {
-        // Calculate ideal trajectory
-        let x = launchSpeed * Math.cos(launchAngle) * t;
-        const y = launchSpeed * Math.sin(launchAngle) * t - 0.5 * GRAVITY * t * t;
-        const z = 0;
-
-        // Apply drag efficiency to horizontal distance
-        x *= dragEfficiency;
-
-        if (y < 0 && t > 0) break;
-
-        trajectoryPoints.push(new THREE.Vector3(x, Math.max(0, y), z));
-        t += dt;
-      }
-
       return trajectoryPoints;
     }
 
@@ -395,18 +409,33 @@
       const horizontalVariation = (Math.random() - 0.5) * 10;
       const launchDirection = horizontalVariation * Math.PI / 180;
 
-      currentDragEfficiency = club.dragEfficiency;
+      // Backspin variation: ±10%
+      const spinVariation = 1.0 + (Math.random() - 0.5) * 0.2;
+      const backspinRpm = club.backspin * spinVariation;
 
-      // Calculate velocity with horizontal dispersion
+      // Sidespin from horizontal dispersion (slice/hook)
+      // More dispersion = more sidespin
+      const sidespinRpm = horizontalVariation * 150;  // ~±750 rpm sidespin
+
+      // Initialize position
+      position = { x: 0, y: 0.02, z: 0 };
+
+      // Initialize velocity with horizontal dispersion
       const forwardSpeed = launchSpeed * Math.cos(launchAngle);
-      initialVelocity = {
+      velocity = {
         x: forwardSpeed * Math.cos(launchDirection),
         y: launchSpeed * Math.sin(launchAngle),
         z: forwardSpeed * Math.sin(launchDirection)
       };
 
+      // Initialize spin
+      spinRate = {
+        backspin: backspinRpm,
+        sidespin: sidespinRpm
+      };
+
       // Start with ball's initial position
-      tracedPoints.push(new THREE.Vector3(0, 0.02, 0));
+      tracedPoints.push(new THREE.Vector3(position.x, position.y, position.z));
 
       document.getElementById('swing-btn').disabled = true;
     }
@@ -416,45 +445,107 @@
 
       flightTime += deltaTime;
 
-      // Calculate position using kinematic equations
-      let x = initialVelocity.x * flightTime;
-      const y = initialVelocity.y * flightTime - 0.5 * GRAVITY * flightTime * flightTime;
-      let z = initialVelocity.z * flightTime;
+      // Calculate current ball speed
+      const speed = Math.sqrt(velocity.x * velocity.x + velocity.y * velocity.y + velocity.z * velocity.z);
 
-      // Apply drag efficiency to horizontal distances
-      x *= currentDragEfficiency;
-      z *= currentDragEfficiency;
+      if (speed < 0.1) {
+        // Ball has essentially stopped
+        isFlying = false;
+        position.y = 0.02;
+        setTimeout(reset, 2000);
+        return;
+      }
 
-      ball.position.set(x, Math.max(0.02, y), z);
+      // Unit velocity vector
+      const vx = velocity.x / speed;
+      const vy = velocity.y / speed;
+      const vz = velocity.z / speed;
+
+      // Calculate aerodynamic coefficients
+      const Cd = getDragCoefficient(speed);
+      const Cl_backspin = getLiftCoefficient(spinRate.backspin, speed);
+      const Cl_sidespin = getLiftCoefficient(Math.abs(spinRate.sidespin), speed);
+
+      // Calculate forces
+      const dynamicPressure = 0.5 * AIR_DENSITY * speed * speed * BALL_AREA;
+
+      // 1. Gravity (downward)
+      const F_gravity = -BALL_MASS * GRAVITY;  // y-direction
+
+      // 2. Drag force (opposite to velocity)
+      const F_drag = dynamicPressure * Cd;
+      const F_drag_x = -F_drag * vx;
+      const F_drag_y = -F_drag * vy;
+      const F_drag_z = -F_drag * vz;
+
+      // 3. Magnus lift force from backspin (perpendicular to velocity, upward)
+      // Lift direction: perpendicular to velocity in vertical plane
+      // For backspin, lift is upward (perpendicular to horizontal velocity)
+      const F_lift_backspin = dynamicPressure * Cl_backspin;
+
+      // Lift perpendicular to velocity vector in vertical plane
+      // Simplified: assume lift is mostly vertical when ball moving mostly horizontal
+      const horizontalSpeed = Math.sqrt(velocity.x * velocity.x + velocity.z * velocity.z);
+      const lift_x = F_lift_backspin * (-velocity.x * velocity.y) / (speed * Math.max(horizontalSpeed, 0.1));
+      const lift_y = F_lift_backspin * horizontalSpeed / speed;
+      const lift_z = F_lift_backspin * (-velocity.z * velocity.y) / (speed * Math.max(horizontalSpeed, 0.1));
+
+      // 4. Magnus side force from sidespin (curves ball left/right)
+      const F_side = dynamicPressure * Cl_sidespin;
+      const sideForceDirection = spinRate.sidespin > 0 ? 1 : -1;  // positive = right curve
+      // Side force perpendicular to velocity in horizontal plane
+      const side_x = -F_side * vz * sideForceDirection;
+      const side_y = 0;
+      const side_z = F_side * vx * sideForceDirection;
+
+      // Total forces
+      const F_x = F_drag_x + lift_x + side_x;
+      const F_y = F_gravity + F_drag_y + lift_y + side_y;
+      const F_z = F_drag_z + lift_z + side_z;
+
+      // Acceleration = F / m
+      const ax = F_x / BALL_MASS;
+      const ay = F_y / BALL_MASS;
+      const az = F_z / BALL_MASS;
+
+      // Euler integration: update velocity and position
+      velocity.x += ax * deltaTime;
+      velocity.y += ay * deltaTime;
+      velocity.z += az * deltaTime;
+
+      position.x += velocity.x * deltaTime;
+      position.y += velocity.y * deltaTime;
+      position.z += velocity.z * deltaTime;
+
+      // Ground collision
+      if (position.y < 0.02) {
+        position.y = 0.02;
+        isFlying = false;
+        setTimeout(reset, 2000);
+      }
+
+      // Update ball visual position
+      ball.position.set(position.x, position.y, position.z);
 
       // Add current position to traced path
-      tracedPoints.push(new THREE.Vector3(x, Math.max(0.02, y), z));
+      tracedPoints.push(new THREE.Vector3(position.x, position.y, position.z));
 
       // Update the trajectory visualization
       updateTrajectory(tracedPoints);
 
       // Track max height
-      if (y > maxHeight) maxHeight = y;
+      if (position.y > maxHeight) maxHeight = position.y;
 
       // Update camera to follow ball in 3D
-      camera.position.x = x - 5;
-      camera.position.y = Math.max(3, y + 2);
-      camera.position.z = z + 8;
+      camera.position.x = position.x - 5;
+      camera.position.y = Math.max(3, position.y + 2);
+      camera.position.z = position.z + 8;
       camera.lookAt(ball.position);
 
       // Update stats (total horizontal distance including lateral movement)
-      const totalDistance = Math.sqrt(x * x + z * z);
+      const totalDistance = Math.sqrt(position.x * position.x + position.z * position.z);
       document.getElementById('distance').textContent = Math.round(totalDistance * YARDS_PER_METER);
       document.getElementById('height').textContent = Math.round(maxHeight * YARDS_PER_METER);
-
-      // Check if ball landed
-      if (y <= 0 && flightTime > 0.1) {
-        isFlying = false;
-        ball.position.y = 0.02;
-
-        // Reset after delay
-        setTimeout(reset, 2000);
-      }
     }
 
     function reset() {
@@ -462,6 +553,11 @@
       clubGroup.rotation.z = -Math.PI / 2; // Back to backswing position
       camera.position.set(-5, 3, 8);
       camera.lookAt(0, 0, 0);
+
+      // Reset state variables
+      position = { x: 0, y: 0.02, z: 0 };
+      velocity = { x: 0, y: 0, z: 0 };
+      spinRate = { backspin: 0, sidespin: 0 };
 
       if (trajectoryLine) {
         scene.remove(trajectoryLine);
