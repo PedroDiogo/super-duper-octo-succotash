@@ -381,14 +381,28 @@
       tracedPoints = []; // Clear traced points for new shot
 
       const club = getCurrentClub();
-      const launchSpeed = club.speed;
-      const launchAngle = club.angle * Math.PI / 180;
+
+      // Add realistic shot dispersion
+      // Ball speed variation: ±2.5% (contact quality)
+      const speedVariation = 1.0 + (Math.random() - 0.5) * 0.05;
+      const launchSpeed = club.speed * speedVariation;
+
+      // Vertical angle variation: ±1.5 degrees
+      const verticalVariation = (Math.random() - 0.5) * 3;
+      const launchAngle = (club.angle + verticalVariation) * Math.PI / 180;
+
+      // Horizontal direction variation: ±5 degrees (slice/hook/draw/fade)
+      const horizontalVariation = (Math.random() - 0.5) * 10;
+      const launchDirection = horizontalVariation * Math.PI / 180;
+
       currentDragEfficiency = club.dragEfficiency;
 
+      // Calculate velocity with horizontal dispersion
+      const forwardSpeed = launchSpeed * Math.cos(launchAngle);
       initialVelocity = {
-        x: launchSpeed * Math.cos(launchAngle),
+        x: forwardSpeed * Math.cos(launchDirection),
         y: launchSpeed * Math.sin(launchAngle),
-        z: 0
+        z: forwardSpeed * Math.sin(launchDirection)
       };
 
       // Start with ball's initial position
@@ -405,10 +419,11 @@
       // Calculate position using kinematic equations
       let x = initialVelocity.x * flightTime;
       const y = initialVelocity.y * flightTime - 0.5 * GRAVITY * flightTime * flightTime;
-      const z = initialVelocity.z * flightTime;
+      let z = initialVelocity.z * flightTime;
 
-      // Apply drag efficiency to horizontal distance
+      // Apply drag efficiency to horizontal distances
       x *= currentDragEfficiency;
+      z *= currentDragEfficiency;
 
       ball.position.set(x, Math.max(0.02, y), z);
 
@@ -421,13 +436,15 @@
       // Track max height
       if (y > maxHeight) maxHeight = y;
 
-      // Update camera to follow ball
+      // Update camera to follow ball in 3D
       camera.position.x = x - 5;
       camera.position.y = Math.max(3, y + 2);
+      camera.position.z = z + 8;
       camera.lookAt(ball.position);
 
-      // Update stats
-      document.getElementById('distance').textContent = Math.round(x * YARDS_PER_METER);
+      // Update stats (total horizontal distance including lateral movement)
+      const totalDistance = Math.sqrt(x * x + z * z);
+      document.getElementById('distance').textContent = Math.round(totalDistance * YARDS_PER_METER);
       document.getElementById('height').textContent = Math.round(maxHeight * YARDS_PER_METER);
 
       // Check if ball landed
