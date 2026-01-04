@@ -218,7 +218,9 @@
         return 1.48 - (loft * 0.003);
       } else if (clubType === 'hybrid') {
         return 1.40 - (loft * 0.004);
-      } else {  // irons and wedges
+      } else if (clubType === 'iron') {
+        return 1.43 - (loft * 0.0055);  // More aggressive drop for irons
+      } else {  // wedges
         return 1.42 - (loft * 0.005);
       }
     }
@@ -262,7 +264,9 @@
         }
       } else if (clubType === 'hybrid') {
         return 1.0 - (loft * 0.0082);
-      } else {  // irons and wedges
+      } else if (clubType === 'iron') {
+        return 1.0 - (loft * 0.0088);  // More drag for irons
+      } else {  // wedges
         return 1.0 - (loft * 0.0078);
       }
     }

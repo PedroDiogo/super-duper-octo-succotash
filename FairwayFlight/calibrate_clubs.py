@@ -55,7 +55,9 @@ def get_smash_factor(loft, club_type):
         return 1.48 - (loft * 0.003)
     elif club_type == 'hybrid':
         return 1.40 - (loft * 0.004)
-    else:  # irons and wedges
+    elif club_type == 'iron':
+        return 1.43 - (loft * 0.0055)  # More aggressive drop for irons
+    else:  # wedges
         return 1.42 - (loft * 0.005)
 
 def get_launch_angle(loft, club_type):
@@ -106,7 +108,9 @@ def calculate_distance(ball_speed, launch_angle_deg, loft, club_type):
             drag_efficiency = 1.0 - (loft * 0.0092)
     elif club_type == 'hybrid':
         drag_efficiency = 1.0 - (loft * 0.0082)
-    else:  # irons and wedges
+    elif club_type == 'iron':
+        drag_efficiency = 1.0 - (loft * 0.0088)  # More drag for irons
+    else:  # wedges
         drag_efficiency = 1.0 - (loft * 0.0078)
 
     distance_meters *= drag_efficiency
