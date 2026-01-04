@@ -123,6 +123,7 @@
     let flightTime = 0;
     let initialVelocity = { x: 0, y: 0, z: 0 };
     let trajectoryPoints = [];
+    let tracedPoints = []; // Points traced so far during flight
     let maxHeight = 0;
 
     // Launch parameters (typical driver shot)
@@ -153,14 +154,15 @@
       return trajectoryPoints;
     }
 
-    function drawTrajectory() {
+    function updateTrajectory(points) {
       if (trajectoryLine) scene.remove(trajectoryLine);
 
-      const points = calculateTrajectory();
+      // Need at least 2 points to draw a path
+      if (points.length < 2) return;
 
-      // Create a curve from the points for the tube geometry
+      // Create a curve from the traced points
       const curve = new THREE.CatmullRomCurve3(points);
-      const tubeGeometry = new THREE.TubeGeometry(curve, points.length * 2, 0.05, 8, false);
+      const tubeGeometry = new THREE.TubeGeometry(curve, Math.max(points.length * 2, 20), 0.05, 8, false);
       const material = new THREE.MeshBasicMaterial({
         color: 0xff0000,
         transparent: true,
@@ -213,6 +215,7 @@
       isFlying = true;
       flightTime = 0;
       maxHeight = 0;
+      tracedPoints = []; // Clear traced points for new shot
 
       initialVelocity = {
         x: launchSpeed * Math.cos(launchAngle),
@@ -220,7 +223,9 @@
         z: 0
       };
 
-      drawTrajectory();
+      // Start with ball's initial position
+      tracedPoints.push(new THREE.Vector3(0, 0.02, 0));
+
       document.getElementById('swing-btn').disabled = true;
     }
 
@@ -235,6 +240,12 @@
       const z = initialVelocity.z * flightTime;
 
       ball.position.set(x, Math.max(0.02, y), z);
+
+      // Add current position to traced path
+      tracedPoints.push(new THREE.Vector3(x, Math.max(0.02, y), z));
+
+      // Update the trajectory visualization
+      updateTrajectory(tracedPoints);
 
       // Track max height
       if (y > maxHeight) maxHeight = y;
@@ -268,6 +279,8 @@
         scene.remove(trajectoryLine);
         trajectoryLine = null;
       }
+
+      tracedPoints = []; // Clear traced path
 
       document.getElementById('swing-btn').disabled = false;
       document.getElementById('distance').textContent = '0';
