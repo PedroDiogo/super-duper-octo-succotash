@@ -144,6 +144,7 @@
     let isFlying = false;
     let flightTime = 0;
     let initialVelocity = { x: 0, y: 0, z: 0 };
+    let currentDragEfficiency = 1.0;
     let trajectoryPoints = [];
     let tracedPoints = []; // Points traced so far during flight
     let maxHeight = 0;
@@ -202,34 +203,68 @@
       }
     };
 
-    // Swing speeds by club type (average golfer)
+    // Swing speeds by club type (calibrated for average golfer)
     const swingSpeeds = {
-      driver: 42,   // m/s (~94 mph)
-      wood: 40,     // m/s (~89 mph)
-      hybrid: 38,   // m/s (~85 mph)
-      iron: 36,     // m/s (~80 mph)
-      wedge: 30     // m/s (~67 mph)
+      driver: 48,    // m/s (~107 mph)
+      wood: 42.5,    // m/s (~95 mph)
+      hybrid: 38,    // m/s (~85 mph)
+      iron: 36,      // m/s (~80 mph)
+      wedge: 32      // m/s (~72 mph)
     };
 
-    // Calculate smash factor based on loft
-    // Higher loft = lower smash factor (less efficient energy transfer)
-    // This approximates energy losses from spin and air resistance
-    function getSmashFactor(loft) {
-      // Driver: ~1.48, Woods: ~1.35-1.42, Irons: ~1.25-1.35, Wedges: ~1.05-1.15
-      // Formula adjusted to cover full club range
-      return 1.50 - (loft * 0.008);
+    // Calculate smash factor based on loft and club type
+    function getSmashFactor(loft, clubType) {
+      if (clubType === 'driver' || clubType === 'wood') {
+        return 1.48 - (loft * 0.003);
+      } else if (clubType === 'hybrid') {
+        return 1.40 - (loft * 0.004);
+      } else {  // irons and wedges
+        return 1.42 - (loft * 0.005);
+      }
     }
 
-    // Calculate launch angle from club loft
-    // Typically 70-85% of club loft, using 75% as average
-    function getLaunchAngle(loft) {
-      return loft * 0.75;
+    // Calculate launch angle from club loft and type
+    function getLaunchAngle(loft, clubType) {
+      if (clubType === 'driver') {
+        return loft + 2;  // Driver launches above static loft
+      } else if (clubType === 'wood') {
+        return loft + 1;  // Woods launch slightly above loft
+      } else if (clubType === 'hybrid') {
+        return loft * 0.9;
+      } else if (clubType === 'iron') {
+        return loft * 0.85;
+      } else {  // wedges
+        return loft * 0.75;
+      }
     }
 
-    // Get ball speed from club head speed and loft
+    // Get ball speed from club head speed, loft, and type
     function getBallSpeed(loft, clubType) {
-      const swingSpeed = swingSpeeds[clubType];
-      return swingSpeed * getSmashFactor(loft);
+      let swingSpeed = swingSpeeds[clubType];
+      // 5 wood gets slightly lower swing speed
+      if (loft === 19) {
+        swingSpeed *= 0.95;
+      }
+      return swingSpeed * getSmashFactor(loft, clubType);
+    }
+
+    // Calculate drag efficiency based on loft and club type
+    // Approximates air resistance and spin effects
+    function getDragEfficiency(loft, clubType) {
+      if (clubType === 'driver') {
+        return 1.0 - (loft * 0.0076);
+      } else if (clubType === 'wood') {
+        // 5 wood gets extra drag penalty
+        if (loft === 19) {
+          return 1.0 - (loft * 0.0105);
+        } else {
+          return 1.0 - (loft * 0.0092);
+        }
+      } else if (clubType === 'hybrid') {
+        return 1.0 - (loft * 0.0082);
+      } else {  // irons and wedges
+        return 1.0 - (loft * 0.0078);
+      }
     }
 
     // Get current club with calculated parameters
@@ -241,7 +276,8 @@
         loft: club.loft,
         type: club.type,
         speed: getBallSpeed(club.loft, club.type),
-        angle: getLaunchAngle(club.loft)
+        angle: getLaunchAngle(club.loft, club.type),
+        dragEfficiency: getDragEfficiency(club.loft, club.type)
       };
     }
 
@@ -250,6 +286,7 @@
       const club = getCurrentClub();
       const launchSpeed = club.speed;
       const launchAngle = club.angle * Math.PI / 180;
+      const dragEfficiency = club.dragEfficiency;
 
       const dt = 0.02;
       let t = 0;
@@ -259,9 +296,13 @@
       maxT *= 1.1;
 
       while (t <= maxT) {
-        const x = launchSpeed * Math.cos(launchAngle) * t;
+        // Calculate ideal trajectory
+        let x = launchSpeed * Math.cos(launchAngle) * t;
         const y = launchSpeed * Math.sin(launchAngle) * t - 0.5 * GRAVITY * t * t;
         const z = 0;
+
+        // Apply drag efficiency to horizontal distance
+        x *= dragEfficiency;
 
         if (y < 0 && t > 0) break;
 
@@ -338,6 +379,7 @@
       const club = getCurrentClub();
       const launchSpeed = club.speed;
       const launchAngle = club.angle * Math.PI / 180;
+      currentDragEfficiency = club.dragEfficiency;
 
       initialVelocity = {
         x: launchSpeed * Math.cos(launchAngle),
@@ -357,9 +399,12 @@
       flightTime += deltaTime;
 
       // Calculate position using kinematic equations
-      const x = initialVelocity.x * flightTime;
+      let x = initialVelocity.x * flightTime;
       const y = initialVelocity.y * flightTime - 0.5 * GRAVITY * flightTime * flightTime;
       const z = initialVelocity.z * flightTime;
+
+      // Apply drag efficiency to horizontal distance
+      x *= currentDragEfficiency;
 
       ball.position.set(x, Math.max(0.02, y), z);
 
