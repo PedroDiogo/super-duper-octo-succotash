@@ -157,10 +157,11 @@
 
     // Calculate smash factor based on loft
     // Higher loft = lower smash factor (less efficient energy transfer)
+    // This approximates energy losses from spin and air resistance
     function getSmashFactor(loft) {
-      // Wedges typically have smash factor between 1.05-1.15
-      // Linear decrease with loft
-      return 1.15 - (loft - 40) * 0.005;
+      // Wedges typically have smash factor between 1.05-1.20
+      // More aggressive drop with loft to simulate spin/drag losses
+      return 1.22 - (loft - 40) * 0.012;
     }
 
     // Calculate launch angle from club loft
