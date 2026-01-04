@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Golf club physics calibration script.
+Golf club physics calibration script with Magnus effect.
 Validates ball flight distances and helps tune parameters.
 """
 
@@ -9,6 +9,10 @@ import math
 # Physics constants
 GRAVITY = 9.81  # m/s²
 YARDS_PER_METER = 1.094
+AIR_DENSITY = 1.225  # kg/m³
+BALL_MASS = 0.0459  # kg
+BALL_DIAMETER = 0.0427  # m
+BALL_AREA = math.pi * (BALL_DIAMETER / 2) ** 2
 
 # Club definitions
 clubs = {
@@ -24,13 +28,13 @@ clubs = {
     'sw': {'loft': 56, 'type': 'wedge'}
 }
 
-# Swing speeds by club type (m/s)
+# Swing speeds by club type (m/s) - calibrated for Magnus effect
 swing_speeds = {
-    'driver': 48,   # ~107 mph
-    'wood': 42.5,   # ~95 mph
-    'hybrid': 38,   # ~85 mph
-    'iron': 36,     # ~80 mph
-    'wedge': 32     # ~72 mph
+    'driver': 62,   # ~139 mph
+    'wood': 56,     # ~125 mph
+    'hybrid': 48,   # ~107 mph
+    'iron': 44,     # ~98 mph
+    'wedge': 33     # ~74 mph
 }
 
 # Target distances for average golfer (yards)
@@ -84,37 +88,125 @@ def get_ball_speed(loft, club_type):
         swing_speed *= 0.95
     return swing_speed * get_smash_factor(loft, club_type)
 
+def get_backspin(loft, club_type, ball_speed):
+    """Calculate backspin rate based on club type and loft."""
+    # Calibrated spin rates for realistic distances with Magnus effect
+    if club_type == 'driver':
+        return 2200 + loft * 30  # ~2500 rpm
+    elif club_type == 'wood':
+        return 3000 + loft * 50  # ~3750-3950 rpm
+    elif club_type == 'hybrid':
+        return 3500 + loft * 60  # ~5120 rpm
+    elif club_type == 'iron':
+        return 4000 + loft * 80  # ~6480-7280 rpm
+    else:  # wedges
+        return 6000 + loft * 70  # ~9220-9920 rpm (reduced from 100x)
+
+def get_drag_coefficient(speed):
+    """Calculate drag coefficient based on ball speed (Reynolds number)."""
+    Re = (speed * BALL_DIAMETER) / 0.000015
+
+    if Re < 100000:
+        return 0.5
+    elif Re > 200000:
+        return 0.23
+    else:
+        t = (Re - 100000) / 100000
+        return 0.5 - (0.27 * t)
+
+def get_lift_coefficient(spin_rpm, speed):
+    """Calculate lift coefficient from Magnus effect."""
+    omega = spin_rpm * 2 * math.pi / 60
+    spin_parameter = (BALL_DIAMETER / 2) * omega / max(speed, 0.1)
+    Cl = min(0.25 * spin_parameter, 0.35)
+    return Cl
+
 def calculate_distance(ball_speed, launch_angle_deg, loft, club_type):
-    """Calculate carry distance using projectile motion with drag approximation."""
+    """Calculate carry distance using force-based simulation with Magnus effect."""
     launch_angle = math.radians(launch_angle_deg)
 
-    # Time of flight (ideal)
-    flight_time = (2 * ball_speed * math.sin(launch_angle)) / GRAVITY
+    # Get backspin rate
+    backspin_rpm = get_backspin(loft, club_type, ball_speed)
 
-    # Horizontal distance (ideal)
-    distance_meters = ball_speed * math.cos(launch_angle) * flight_time
+    # Initial conditions
+    pos = {'x': 0, 'y': 0.02, 'z': 0}
+    vel = {
+        'x': ball_speed * math.cos(launch_angle),
+        'y': ball_speed * math.sin(launch_angle),
+        'z': 0
+    }
 
-    # Apply drag factor based on loft and club type
-    # This approximates air resistance and spin effects
-    # Use different coefficients for different club types
-    if club_type == 'driver':
-        drag_efficiency = 1.0 - (loft * 0.0076)
-    elif club_type == 'wood':
-        # Woods need more aggressive drag, especially 5W which has optimal launch angle
-        # 5W gets extra penalty due to being close to optimal projectile angle
-        if loft == 19:  # 5 wood
-            drag_efficiency = 1.0 - (loft * 0.0105)
-        else:
-            drag_efficiency = 1.0 - (loft * 0.0092)
-    elif club_type == 'hybrid':
-        drag_efficiency = 1.0 - (loft * 0.0082)
-    elif club_type == 'iron':
-        drag_efficiency = 1.0 - (loft * 0.0088)  # More drag for irons
-    else:  # wedges
-        drag_efficiency = 1.0 - (loft * 0.0078)
+    # Simulation parameters
+    dt = 0.001  # Small timestep for accuracy
+    max_time = 15  # Maximum flight time
+    t = 0
+    max_height = 0
 
-    distance_meters *= drag_efficiency
+    # Simulate trajectory using forces
+    while t < max_time and pos['y'] >= 0.02:
+        # Current speed
+        speed = math.sqrt(vel['x']**2 + vel['y']**2 + vel['z']**2)
 
+        if speed < 0.1:
+            break
+
+        # Unit velocity
+        vx = vel['x'] / speed
+        vy = vel['y'] / speed
+        vz = vel['z'] / speed
+
+        # Aerodynamic coefficients
+        Cd = get_drag_coefficient(speed)
+        Cl = get_lift_coefficient(backspin_rpm, speed)
+
+        # Dynamic pressure
+        q = 0.5 * AIR_DENSITY * speed * speed * BALL_AREA
+
+        # Forces
+        # 1. Gravity
+        F_gravity_y = -BALL_MASS * GRAVITY
+
+        # 2. Drag (opposite to velocity)
+        F_drag = q * Cd
+        F_drag_x = -F_drag * vx
+        F_drag_y = -F_drag * vy
+        F_drag_z = -F_drag * vz
+
+        # 3. Magnus lift (from backspin, perpendicular to velocity)
+        F_lift = q * Cl
+        horizontal_speed = math.sqrt(vel['x']**2 + vel['z']**2)
+
+        # Lift components (perpendicular to velocity in vertical plane)
+        lift_x = F_lift * (-vel['x'] * vel['y']) / (speed * max(horizontal_speed, 0.1))
+        lift_y = F_lift * horizontal_speed / speed
+        lift_z = F_lift * (-vel['z'] * vel['y']) / (speed * max(horizontal_speed, 0.1))
+
+        # Total forces
+        F_x = F_drag_x + lift_x
+        F_y = F_gravity_y + F_drag_y + lift_y
+        F_z = F_drag_z + lift_z
+
+        # Acceleration
+        ax = F_x / BALL_MASS
+        ay = F_y / BALL_MASS
+        az = F_z / BALL_MASS
+
+        # Update velocity and position (Euler integration)
+        vel['x'] += ax * dt
+        vel['y'] += ay * dt
+        vel['z'] += az * dt
+
+        pos['x'] += vel['x'] * dt
+        pos['y'] += vel['y'] * dt
+        pos['z'] += vel['z'] * dt
+
+        if pos['y'] > max_height:
+            max_height = pos['y']
+
+        t += dt
+
+    # Calculate total horizontal distance
+    distance_meters = math.sqrt(pos['x']**2 + pos['z']**2)
     distance_yards = distance_meters * YARDS_PER_METER
 
     return distance_yards

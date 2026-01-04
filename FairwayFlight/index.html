@@ -208,13 +208,13 @@
       }
     };
 
-    // Swing speeds by club type (calibrated for average golfer)
+    // Swing speeds by club type (calibrated for Magnus effect)
     const swingSpeeds = {
-      driver: 48,    // m/s (~107 mph)
-      wood: 42.5,    // m/s (~95 mph)
-      hybrid: 38,    // m/s (~85 mph)
-      iron: 36,      // m/s (~80 mph)
-      wedge: 32      // m/s (~72 mph)
+      driver: 62,    // m/s (~139 mph)
+      wood: 56,      // m/s (~125 mph)
+      hybrid: 48,    // m/s (~107 mph)
+      iron: 44,      // m/s (~98 mph)
+      wedge: 33      // m/s (~74 mph)
     };
 
     // Calculate smash factor based on loft and club type
@@ -256,23 +256,18 @@
     }
 
     // Calculate backspin rate based on club type and loft
-    // Higher loft = more spin
+    // Calibrated for realistic distances with Magnus effect
     function getBackspin(loft, clubType, ballSpeed) {
-      // Spin loft relationship: more loft = more backspin
-      // Ball speed also affects spin
-      const spinLoftFactor = loft * 100;  // Base spin from loft
-      const speedFactor = ballSpeed * 30;  // More speed = more spin
-
       if (clubType === 'driver') {
-        return 2000 + spinLoftFactor + speedFactor * 0.3;  // 2000-3500 rpm
+        return 2200 + loft * 30;  // ~2500 rpm
       } else if (clubType === 'wood') {
-        return 3000 + spinLoftFactor + speedFactor * 0.4;  // 3000-5000 rpm
+        return 3000 + loft * 50;  // ~3750-3950 rpm
       } else if (clubType === 'hybrid') {
-        return 4000 + spinLoftFactor + speedFactor * 0.5;  // 4000-6000 rpm
+        return 3500 + loft * 60;  // ~5120 rpm
       } else if (clubType === 'iron') {
-        return 5000 + spinLoftFactor + speedFactor * 0.6;  // 5000-8000 rpm
+        return 4000 + loft * 80;  // ~6480-7280 rpm
       } else {  // wedges
-        return 7000 + spinLoftFactor + speedFactor * 0.7;  // 7000-11000 rpm
+        return 6000 + loft * 70;  // ~9220-9920 rpm
       }
     }
 
