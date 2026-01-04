@@ -15,6 +15,16 @@
       color: white;
       text-shadow: 1px 1px 2px black;
     }
+    #club-selector {
+      margin-top: 10px;
+      padding: 8px 12px;
+      font-size: 16px;
+      background: white;
+      border: 2px solid #2e7d32;
+      border-radius: 6px;
+      cursor: pointer;
+      width: 200px;
+    }
     #swing-btn {
       padding: 12px 24px;
       font-size: 18px;
@@ -33,6 +43,10 @@
 <body>
   <div id="ui">
     <h1>FairwayFlight</h1>
+    <select id="club-selector">
+      <option value="pw">Pitching Wedge</option>
+      <option value="sw">Sand Wedge</option>
+    </select>
     <button id="swing-btn">Swing!</button>
     <div id="stats">
       <p>Distance: <span id="distance">0</span> yards</p>
@@ -126,13 +140,32 @@
     let tracedPoints = []; // Points traced so far during flight
     let maxHeight = 0;
 
-    // Launch parameters (typical driver shot)
-    const launchSpeed = 70; // m/s (~156 mph ball speed)
-    const launchAngle = 12 * Math.PI / 180; // 12 degrees
-    const launchDirection = 0; // straight
+    // Club definitions
+    const clubs = {
+      pw: {
+        name: 'Pitching Wedge',
+        speed: 42,  // m/s (~94 mph ball speed)
+        angle: 28   // degrees
+      },
+      sw: {
+        name: 'Sand Wedge',
+        speed: 38,  // m/s (~85 mph ball speed)
+        angle: 32   // degrees
+      }
+    };
+
+    // Get current club parameters
+    function getCurrentClub() {
+      const clubId = document.getElementById('club-selector').value;
+      return clubs[clubId];
+    }
 
     function calculateTrajectory() {
       trajectoryPoints = [];
+      const club = getCurrentClub();
+      const launchSpeed = club.speed;
+      const launchAngle = club.angle * Math.PI / 180;
+
       const dt = 0.02;
       let t = 0;
       let maxT = (2 * launchSpeed * Math.sin(launchAngle)) / GRAVITY;
@@ -216,6 +249,10 @@
       flightTime = 0;
       maxHeight = 0;
       tracedPoints = []; // Clear traced points for new shot
+
+      const club = getCurrentClub();
+      const launchSpeed = club.speed;
+      const launchAngle = club.angle * Math.PI / 180;
 
       initialVelocity = {
         x: launchSpeed * Math.cos(launchAngle),
