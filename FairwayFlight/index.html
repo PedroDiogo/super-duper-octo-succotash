@@ -140,26 +140,50 @@
     let tracedPoints = []; // Points traced so far during flight
     let maxHeight = 0;
 
-    // Club definitions (calibrated for average golfer)
-    // Lower loft = more energy into forward speed (due to impact physics)
-    // Higher loft = more backspin/drag, less forward speed
+    // Club definitions with loft angles
     const clubs = {
       pw: {
         name: 'Pitching Wedge',
-        speed: 34,  // m/s (~76 mph ball speed) - avg ~110 yards
-        angle: 28   // degrees - 46° club loft
+        loft: 46  // degrees
       },
       sw: {
         name: 'Sand Wedge',
-        speed: 28,  // m/s (~63 mph ball speed) - avg ~80 yards
-        angle: 35   // degrees - 56° club loft
+        loft: 56  // degrees
       }
     };
 
-    // Get current club parameters
+    // Physics constants
+    const CLUB_HEAD_SPEED = 30; // m/s (average golfer wedge swing speed)
+
+    // Calculate smash factor based on loft
+    // Higher loft = lower smash factor (less efficient energy transfer)
+    function getSmashFactor(loft) {
+      // Wedges typically have smash factor between 1.05-1.15
+      // Linear decrease with loft
+      return 1.15 - (loft - 40) * 0.005;
+    }
+
+    // Calculate launch angle from club loft
+    // Typically 70-85% of club loft, using 75% as average
+    function getLaunchAngle(loft) {
+      return loft * 0.75;
+    }
+
+    // Get ball speed from club head speed and loft
+    function getBallSpeed(loft) {
+      return CLUB_HEAD_SPEED * getSmashFactor(loft);
+    }
+
+    // Get current club with calculated parameters
     function getCurrentClub() {
       const clubId = document.getElementById('club-selector').value;
-      return clubs[clubId];
+      const club = clubs[clubId];
+      return {
+        name: club.name,
+        loft: club.loft,
+        speed: getBallSpeed(club.loft),
+        angle: getLaunchAngle(club.loft)
+      };
     }
 
     function calculateTrajectory() {
