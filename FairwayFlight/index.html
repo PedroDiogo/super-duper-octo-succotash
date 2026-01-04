@@ -140,16 +140,16 @@
     let tracedPoints = []; // Points traced so far during flight
     let maxHeight = 0;
 
-    // Club definitions
+    // Club definitions (calibrated for average golfer)
     const clubs = {
       pw: {
         name: 'Pitching Wedge',
-        speed: 42,  // m/s (~94 mph ball speed)
+        speed: 34,  // m/s (~76 mph ball speed) - avg ~110 yards
         angle: 28   // degrees
       },
       sw: {
         name: 'Sand Wedge',
-        speed: 38,  // m/s (~85 mph ball speed)
+        speed: 29,  // m/s (~65 mph ball speed) - avg ~85 yards
         angle: 32   // degrees
       }
     };
