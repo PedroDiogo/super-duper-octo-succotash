@@ -157,14 +157,16 @@
       if (trajectoryLine) scene.remove(trajectoryLine);
 
       const points = calculateTrajectory();
-      const geometry = new THREE.BufferGeometry().setFromPoints(points);
-      const material = new THREE.LineBasicMaterial({
-        color: 0xff6600,
-        linewidth: 2,
+
+      // Create a curve from the points for the tube geometry
+      const curve = new THREE.CatmullRomCurve3(points);
+      const tubeGeometry = new THREE.TubeGeometry(curve, points.length * 2, 0.05, 8, false);
+      const material = new THREE.MeshBasicMaterial({
+        color: 0xff0000,
         transparent: true,
-        opacity: 0.7
+        opacity: 0.8
       });
-      trajectoryLine = new THREE.Line(geometry, material);
+      trajectoryLine = new THREE.Mesh(tubeGeometry, material);
       scene.add(trajectoryLine);
     }
 
