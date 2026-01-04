@@ -44,7 +44,15 @@
   <div id="ui">
     <h1>FairwayFlight</h1>
     <select id="club-selector">
-      <option value="pw">Pitching Wedge</option>
+      <option value="driver">Driver</option>
+      <option value="wood3">3 Wood</option>
+      <option value="wood5">5 Wood</option>
+      <option value="hybrid5">5 Hybrid</option>
+      <option value="iron6">6 Iron</option>
+      <option value="iron7">7 Iron</option>
+      <option value="iron8">8 Iron</option>
+      <option value="iron9">9 Iron</option>
+      <option value="pw" selected>Pitching Wedge</option>
       <option value="sw">Sand Wedge</option>
     </select>
     <button id="swing-btn">Swing!</button>
@@ -140,28 +148,76 @@
     let tracedPoints = []; // Points traced so far during flight
     let maxHeight = 0;
 
-    // Club definitions with loft angles
+    // Club definitions with loft angles and types
     const clubs = {
+      driver: {
+        name: 'Driver',
+        loft: 10.5,
+        type: 'driver'
+      },
+      wood3: {
+        name: '3 Wood',
+        loft: 15,
+        type: 'wood'
+      },
+      wood5: {
+        name: '5 Wood',
+        loft: 19,
+        type: 'wood'
+      },
+      hybrid5: {
+        name: '5 Hybrid',
+        loft: 27,
+        type: 'hybrid'
+      },
+      iron6: {
+        name: '6 Iron',
+        loft: 31,
+        type: 'iron'
+      },
+      iron7: {
+        name: '7 Iron',
+        loft: 34,
+        type: 'iron'
+      },
+      iron8: {
+        name: '8 Iron',
+        loft: 37,
+        type: 'iron'
+      },
+      iron9: {
+        name: '9 Iron',
+        loft: 41,
+        type: 'iron'
+      },
       pw: {
         name: 'Pitching Wedge',
-        loft: 46  // degrees
+        loft: 46,
+        type: 'wedge'
       },
       sw: {
         name: 'Sand Wedge',
-        loft: 56  // degrees
+        loft: 56,
+        type: 'wedge'
       }
     };
 
-    // Physics constants
-    const CLUB_HEAD_SPEED = 30; // m/s (average golfer wedge swing speed)
+    // Swing speeds by club type (average golfer)
+    const swingSpeeds = {
+      driver: 42,   // m/s (~94 mph)
+      wood: 40,     // m/s (~89 mph)
+      hybrid: 38,   // m/s (~85 mph)
+      iron: 36,     // m/s (~80 mph)
+      wedge: 30     // m/s (~67 mph)
+    };
 
     // Calculate smash factor based on loft
     // Higher loft = lower smash factor (less efficient energy transfer)
     // This approximates energy losses from spin and air resistance
     function getSmashFactor(loft) {
-      // Wedges typically have smash factor between 1.05-1.20
-      // More aggressive drop with loft to simulate spin/drag losses
-      return 1.22 - (loft - 40) * 0.012;
+      // Driver: ~1.48, Woods: ~1.35-1.42, Irons: ~1.25-1.35, Wedges: ~1.05-1.15
+      // Formula adjusted to cover full club range
+      return 1.50 - (loft * 0.008);
     }
 
     // Calculate launch angle from club loft
@@ -171,8 +227,9 @@
     }
 
     // Get ball speed from club head speed and loft
-    function getBallSpeed(loft) {
-      return CLUB_HEAD_SPEED * getSmashFactor(loft);
+    function getBallSpeed(loft, clubType) {
+      const swingSpeed = swingSpeeds[clubType];
+      return swingSpeed * getSmashFactor(loft);
     }
 
     // Get current club with calculated parameters
@@ -182,7 +239,8 @@
       return {
         name: club.name,
         loft: club.loft,
-        speed: getBallSpeed(club.loft),
+        type: club.type,
+        speed: getBallSpeed(club.loft, club.type),
         angle: getLaunchAngle(club.loft)
       };
     }
