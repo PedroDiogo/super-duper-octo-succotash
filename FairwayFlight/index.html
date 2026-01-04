@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FairwayFlight - Golf Simulation</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { overflow: hidden; font-family: Arial, sans-serif; }
+    canvas { display: block; }
+    #ui {
+      position: absolute;
+      top: 20px;
+      left: 20px;
+      color: white;
+      text-shadow: 1px 1px 2px black;
+    }
+    #swing-btn {
+      padding: 12px 24px;
+      font-size: 18px;
+      background: #2e7d32;
+      color: white;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      margin-top: 10px;
+    }
+    #swing-btn:hover { background: #1b5e20; }
+    #swing-btn:disabled { background: #666; cursor: not-allowed; }
+    #stats { margin-top: 15px; font-size: 14px; }
+  </style>
+</head>
+<body>
+  <div id="ui">
+    <h1>FairwayFlight</h1>
+    <button id="swing-btn">Swing!</button>
+    <div id="stats">
+      <p>Distance: <span id="distance">0</span> yards</p>
+      <p>Max Height: <span id="height">0</span> yards</p>
+    </div>
+  </div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script>
+    // Scene setup
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x87ceeb);
+
+    const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 2000);
+    camera.position.set(-5, 3, 8);
+    camera.lookAt(0, 0, 0);
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.shadowMap.enabled = true;
+    document.body.appendChild(renderer.domElement);
+
+    // Lighting
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+    scene.add(ambientLight);
+
+    const sunLight = new THREE.DirectionalLight(0xffffff, 0.8);
+    sunLight.position.set(50, 100, 50);
+    sunLight.castShadow = true;
+    scene.add(sunLight);
+
+    // Ground (fairway)
+    const groundGeo = new THREE.PlaneGeometry(500, 500);
+    const groundMat = new THREE.MeshLambertMaterial({ color: 0x3a7d32 });
+    const ground = new THREE.Mesh(groundGeo, groundMat);
+    ground.rotation.x = -Math.PI / 2;
+    ground.receiveShadow = true;
+    scene.add(ground);
+
+    // Golf ball
+    const ballGeo = new THREE.SphereGeometry(0.02, 32, 32);
+    const ballMat = new THREE.MeshLambertMaterial({ color: 0xffffff });
+    const ball = new THREE.Mesh(ballGeo, ballMat);
+    ball.castShadow = true;
+    ball.position.set(0, 0.02, 0);
+    scene.add(ball);
+
+    // Club (simplified)
+    const clubGroup = new THREE.Group();
+
+    // Shaft
+    const shaftGeo = new THREE.CylinderGeometry(0.01, 0.01, 1, 8);
+    const shaftMat = new THREE.MeshLambertMaterial({ color: 0x333333 });
+    const shaft = new THREE.Mesh(shaftGeo, shaftMat);
+    shaft.position.y = 0.5;
+    clubGroup.add(shaft);
+
+    // Club head
+    const headGeo = new THREE.BoxGeometry(0.08, 0.04, 0.15);
+    const headMat = new THREE.MeshLambertMaterial({ color: 0x888888 });
+    const head = new THREE.Mesh(headGeo, headMat);
+    head.position.set(0.04, 0, 0);
+    clubGroup.add(head);
+
+    clubGroup.position.set(-0.3, 0.02, 0);
+    clubGroup.rotation.z = Math.PI / 4;
+    scene.add(clubGroup);
+
+    // Trajectory line
+    let trajectoryLine = null;
+
+    // Physics parameters
+    const GRAVITY = 9.81;
+    const YARDS_PER_METER = 1.094;
+
+    // Simulation state
+    let isFlying = false;
+    let flightTime = 0;
+    let initialVelocity = { x: 0, y: 0, z: 0 };
+    let trajectoryPoints = [];
+    let maxHeight = 0;
+
+    // Launch parameters (typical driver shot)
+    const launchSpeed = 70; // m/s (~156 mph ball speed)
+    const launchAngle = 12 * Math.PI / 180; // 12 degrees
+    const launchDirection = 0; // straight
+
+    function calculateTrajectory() {
+      trajectoryPoints = [];
+      const dt = 0.02;
+      let t = 0;
+      let maxT = (2 * launchSpeed * Math.sin(launchAngle)) / GRAVITY;
+
+      // Add some extra time for safety
+      maxT *= 1.1;
+
+      while (t <= maxT) {
+        const x = launchSpeed * Math.cos(launchAngle) * t;
+        const y = launchSpeed * Math.sin(launchAngle) * t - 0.5 * GRAVITY * t * t;
+        const z = 0;
+
+        if (y < 0 && t > 0) break;
+
+        trajectoryPoints.push(new THREE.Vector3(x, Math.max(0, y), z));
+        t += dt;
+      }
+
+      return trajectoryPoints;
+    }
+
+    function drawTrajectory() {
+      if (trajectoryLine) scene.remove(trajectoryLine);
+
+      const points = calculateTrajectory();
+      const geometry = new THREE.BufferGeometry().setFromPoints(points);
+      const material = new THREE.LineBasicMaterial({
+        color: 0xff6600,
+        linewidth: 2,
+        transparent: true,
+        opacity: 0.7
+      });
+      trajectoryLine = new THREE.Line(geometry, material);
+      scene.add(trajectoryLine);
+    }
+
+    function swing() {
+      if (isFlying) return;
+
+      // Animate club swing
+      const swingDuration = 300;
+      const startRotation = clubGroup.rotation.z;
+      const endRotation = -Math.PI / 3;
+      const startTime = Date.now();
+
+      function animateSwing() {
+        const elapsed = Date.now() - startTime;
+        const progress = Math.min(elapsed / swingDuration, 1);
+
+        // Easing function
+        const eased = 1 - Math.pow(1 - progress, 3);
+        clubGroup.rotation.z = startRotation + (endRotation - startRotation) * eased;
+
+        if (progress < 1) {
+          requestAnimationFrame(animateSwing);
+        } else {
+          // Start ball flight
+          startFlight();
+        }
+      }
+
+      animateSwing();
+    }
+
+    function startFlight() {
+      isFlying = true;
+      flightTime = 0;
+      maxHeight = 0;
+
+      initialVelocity = {
+        x: launchSpeed * Math.cos(launchAngle),
+        y: launchSpeed * Math.sin(launchAngle),
+        z: 0
+      };
+
+      drawTrajectory();
+      document.getElementById('swing-btn').disabled = true;
+    }
+
+    function updateBall(deltaTime) {
+      if (!isFlying) return;
+
+      flightTime += deltaTime;
+
+      // Calculate position using kinematic equations
+      const x = initialVelocity.x * flightTime;
+      const y = initialVelocity.y * flightTime - 0.5 * GRAVITY * flightTime * flightTime;
+      const z = initialVelocity.z * flightTime;
+
+      ball.position.set(x, Math.max(0.02, y), z);
+
+      // Track max height
+      if (y > maxHeight) maxHeight = y;
+
+      // Update camera to follow ball
+      camera.position.x = x - 5;
+      camera.position.y = Math.max(3, y + 2);
+      camera.lookAt(ball.position);
+
+      // Update stats
+      document.getElementById('distance').textContent = Math.round(x * YARDS_PER_METER);
+      document.getElementById('height').textContent = Math.round(maxHeight * YARDS_PER_METER);
+
+      // Check if ball landed
+      if (y <= 0 && flightTime > 0.1) {
+        isFlying = false;
+        ball.position.y = 0.02;
+
+        // Reset after delay
+        setTimeout(reset, 2000);
+      }
+    }
+
+    function reset() {
+      ball.position.set(0, 0.02, 0);
+      clubGroup.rotation.z = Math.PI / 4;
+      camera.position.set(-5, 3, 8);
+      camera.lookAt(0, 0, 0);
+
+      if (trajectoryLine) {
+        scene.remove(trajectoryLine);
+        trajectoryLine = null;
+      }
+
+      document.getElementById('swing-btn').disabled = false;
+      document.getElementById('distance').textContent = '0';
+      document.getElementById('height').textContent = '0';
+    }
+
+    // Event listeners
+    document.getElementById('swing-btn').addEventListener('click', swing);
+
+    window.addEventListener('resize', () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+
+    // Animation loop
+    let lastTime = 0;
+    function animate(currentTime) {
+      requestAnimationFrame(animate);
+
+      const deltaTime = (currentTime - lastTime) / 1000;
+      lastTime = currentTime;
+
+      if (deltaTime < 0.1) { // Cap delta time
+        updateBall(deltaTime);
+      }
+
+      renderer.render(scene, camera);
+    }
+
+    animate(0);
+  </script>
+</body>
+</html>
