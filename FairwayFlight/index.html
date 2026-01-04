@@ -80,25 +80,26 @@
     ball.position.set(0, 0.02, 0);
     scene.add(ball);
 
-    // Club (simplified)
+    // Club (simplified) - pivot point is at the grip (top of shaft)
     const clubGroup = new THREE.Group();
 
-    // Shaft
+    // Shaft - extends downward from grip point (origin)
     const shaftGeo = new THREE.CylinderGeometry(0.01, 0.01, 1, 8);
     const shaftMat = new THREE.MeshLambertMaterial({ color: 0x333333 });
     const shaft = new THREE.Mesh(shaftGeo, shaftMat);
-    shaft.position.y = 0.5;
+    shaft.position.y = -0.5; // Shaft hangs down from pivot
     clubGroup.add(shaft);
 
-    // Club head
+    // Club head - at the bottom of the shaft
     const headGeo = new THREE.BoxGeometry(0.08, 0.04, 0.15);
     const headMat = new THREE.MeshLambertMaterial({ color: 0x888888 });
     const head = new THREE.Mesh(headGeo, headMat);
-    head.position.set(0.04, 0, 0);
+    head.position.set(0.04, -1, 0); // At bottom of shaft
     clubGroup.add(head);
 
-    clubGroup.position.set(-0.3, 0.02, 0);
-    clubGroup.rotation.z = Math.PI / 4;
+    // Position grip point above and behind the ball, angled for backswing
+    clubGroup.position.set(-0.2, 1.1, 0);
+    clubGroup.rotation.z = -Math.PI / 3; // Backswing position
     scene.add(clubGroup);
 
     // Trajectory line
@@ -161,25 +162,31 @@
     function swing() {
       if (isFlying) return;
 
-      // Animate club swing
-      const swingDuration = 300;
-      const startRotation = clubGroup.rotation.z;
-      const endRotation = -Math.PI / 3;
+      // Animate club swing - backswing to follow-through
+      const swingDuration = 400;
+      const startRotation = -Math.PI / 3;  // Backswing position
+      const impactRotation = Math.PI / 12; // Near vertical at impact
+      const endRotation = Math.PI / 2;     // Follow-through
       const startTime = Date.now();
 
       function animateSwing() {
         const elapsed = Date.now() - startTime;
         const progress = Math.min(elapsed / swingDuration, 1);
 
-        // Easing function
-        const eased = 1 - Math.pow(1 - progress, 3);
+        // Easing: fast through impact, slower at ends
+        const eased = progress < 0.5
+          ? 4 * progress * progress * progress
+          : 1 - Math.pow(-2 * progress + 2, 3) / 2;
+
         clubGroup.rotation.z = startRotation + (endRotation - startRotation) * eased;
+
+        // Trigger ball flight at impact point (~40% through swing)
+        if (progress >= 0.4 && !isFlying) {
+          startFlight();
+        }
 
         if (progress < 1) {
           requestAnimationFrame(animateSwing);
-        } else {
-          // Start ball flight
-          startFlight();
         }
       }
 
@@ -237,7 +244,7 @@
 
     function reset() {
       ball.position.set(0, 0.02, 0);
-      clubGroup.rotation.z = Math.PI / 4;
+      clubGroup.rotation.z = -Math.PI / 3; // Back to backswing position
       camera.position.set(-5, 3, 8);
       camera.lookAt(0, 0, 0);
 
