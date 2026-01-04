@@ -141,17 +141,18 @@
     let maxHeight = 0;
 
     // Club definitions (calibrated for average golfer)
-    // Same ball speed, different lofts create distance variation
+    // Lower loft = more energy into forward speed (due to impact physics)
+    // Higher loft = more backspin/drag, less forward speed
     const clubs = {
       pw: {
         name: 'Pitching Wedge',
-        speed: 32,  // m/s (~72 mph ball speed) - avg ~110 yards
-        angle: 26   // degrees (lower loft = flatter trajectory)
+        speed: 34,  // m/s (~76 mph ball speed) - avg ~110 yards
+        angle: 28   // degrees - 46° club loft
       },
       sw: {
         name: 'Sand Wedge',
-        speed: 32,  // m/s (~72 mph ball speed) - avg ~85 yards
-        angle: 34   // degrees (higher loft = steeper trajectory)
+        speed: 28,  // m/s (~63 mph ball speed) - avg ~80 yards
+        angle: 35   // degrees - 56° club loft
       }
     };
 
