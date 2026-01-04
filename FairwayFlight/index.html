@@ -59,6 +59,11 @@
     <div id="stats">
       <p>Distance: <span id="distance">0</span> yards</p>
       <p>Max Height: <span id="height">0</span> yards</p>
+      <p>Backspin: <span id="backspin">0</span> rpm</p>
+      <p>Sidespin: <span id="sidespin">0</span> rpm</p>
+    </div>
+    <div style="margin-top: 10px; font-size: 12px; color: #ccc;">
+      <p>Camera: Mouse drag to rotate, scroll to zoom</p>
     </div>
   </div>
 
@@ -541,13 +546,19 @@
       const totalDistance = Math.sqrt(position.x * position.x + position.z * position.z);
       document.getElementById('distance').textContent = Math.round(totalDistance * YARDS_PER_METER);
       document.getElementById('height').textContent = Math.round(maxHeight * YARDS_PER_METER);
+      document.getElementById('backspin').textContent = Math.round(spinRate.backspin);
+      document.getElementById('sidespin').textContent = Math.round(spinRate.sidespin);
     }
 
     function reset() {
       ball.position.set(0, 0.02, 0);
       clubGroup.rotation.z = -Math.PI / 2; // Back to backswing position
-      camera.position.set(-5, 3, 8);
-      camera.lookAt(0, 0, 0);
+
+      // Reset camera to default position
+      cameraDistance = 10;
+      cameraAngleH = 0;
+      cameraAngleV = 0.5;
+      updateCameraPosition();
 
       // Reset state variables
       position = { x: 0, y: 0.02, z: 0 };
@@ -564,7 +575,61 @@
       document.getElementById('swing-btn').disabled = false;
       document.getElementById('distance').textContent = '0';
       document.getElementById('height').textContent = '0';
+      document.getElementById('backspin').textContent = '0';
+      document.getElementById('sidespin').textContent = '0';
     }
+
+    // Camera control state
+    let isDragging = false;
+    let previousMousePosition = { x: 0, y: 0 };
+    let cameraDistance = 10;
+    let cameraAngleH = 0;  // Horizontal angle
+    let cameraAngleV = 0.5;  // Vertical angle
+
+    function updateCameraPosition() {
+      if (!isFlying) {
+        // Camera orbits around origin when not following ball
+        camera.position.x = cameraDistance * Math.cos(cameraAngleV) * Math.sin(cameraAngleH);
+        camera.position.y = cameraDistance * Math.sin(cameraAngleV);
+        camera.position.z = cameraDistance * Math.cos(cameraAngleV) * Math.cos(cameraAngleH);
+        camera.lookAt(0, 0, 0);
+      }
+    }
+
+    // Mouse controls
+    document.addEventListener('mousedown', (e) => {
+      isDragging = true;
+      previousMousePosition = { x: e.clientX, y: e.clientY };
+    });
+
+    document.addEventListener('mousemove', (e) => {
+      if (isDragging && !isFlying) {
+        const deltaX = e.clientX - previousMousePosition.x;
+        const deltaY = e.clientY - previousMousePosition.y;
+
+        cameraAngleH += deltaX * 0.01;
+        cameraAngleV += deltaY * 0.01;
+
+        // Limit vertical angle
+        cameraAngleV = Math.max(-Math.PI / 2 + 0.1, Math.min(Math.PI / 2 - 0.1, cameraAngleV));
+
+        updateCameraPosition();
+
+        previousMousePosition = { x: e.clientX, y: e.clientY };
+      }
+    });
+
+    document.addEventListener('mouseup', () => {
+      isDragging = false;
+    });
+
+    // Scroll to zoom
+    document.addEventListener('wheel', (e) => {
+      e.preventDefault();
+      cameraDistance += e.deltaY * 0.01;
+      cameraDistance = Math.max(3, Math.min(30, cameraDistance));
+      updateCameraPosition();
+    }, { passive: false });
 
     // Event listeners
     document.getElementById('swing-btn').addEventListener('click', swing);
